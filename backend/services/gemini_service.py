@@ -49,21 +49,54 @@ class GeminiService:
         
         try:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            # Use gemini-2.0-flash (latest model)
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
             self.mock_mode = False
             self._initialized = True
-            print("Gemini API initialized successfully.")
+            print("Gemini API initialized successfully with gemini-2.0-flash.")
             return True
         except Exception as e:
             error_msg = str(e)
+            print(f"Gemini initialization error: {error_msg}")
             if "Request ID" in error_msg or "connection" in error_msg.lower():
                 print("Warning: Gemini API connection error during initialization. Will retry on next request.")
             else:
-                print(f"Warning: Gemini initialization failed. Will retry on next request.")
+                print(f"Warning: Gemini initialization failed: {error_msg}")
             self.mock_mode = True
             self.model = None
             self._initialized = False
             return False
+    
+    def generate_content(self, prompt: str) -> str:
+        """
+        Generic content generation method.
+        
+        Args:
+            prompt: The prompt to send to Gemini
+            
+        Returns:
+            Generated text response
+        """
+        # If not initialized, try to recover
+        if not self._initialized or self.model is None:
+            if self.api_key and genai:
+                if not self._try_initialize():
+                    return ""
+            else:
+                return ""
+        
+        try:
+            response = self.model.generate_content(prompt)
+            if response and hasattr(response, 'text'):
+                return response.text.strip()
+            return ""
+        except Exception as e:
+            print(f"Gemini generate_content error: {e}")
+            error_msg = str(e)
+            if "connection" in error_msg.lower() or "network" in error_msg.lower():
+                self._initialized = False
+                self.model = None
+            return ""
     
     def generate_quiz_questions(self, content: str, num_questions: int) -> str:
         """
@@ -115,15 +148,18 @@ Generate exactly {num_questions} questions. Return JSON only.
         
         try:
             response = self.model.generate_content(prompt)
+            print(f"Gemini response received: {type(response)}")
             if response and hasattr(response, 'text'):
+                print(f"Gemini generated {len(response.text)} chars")
                 return response.text.strip()
             else:
                 # Invalid response format
-                print("Warning: Invalid response from Gemini API. Using mock mode.")
+                print(f"Warning: Invalid response from Gemini API: {response}")
                 return self._mock_quiz_generation(content, num_questions)
         except Exception as e:
             # Catch all API errors (connection, authentication, rate limit, etc.)
             error_msg = str(e)
+            print(f"Gemini API error: {error_msg}")
             
             # Check if it's a connection error - mark as not initialized so we retry next time
             if "Request ID" in error_msg or "connection" in error_msg.lower() or "network" in error_msg.lower():
