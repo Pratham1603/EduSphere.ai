@@ -1,2 +1,6 @@
 .env
 .env.local
+
+# secrets
+backend/token.json
+.env
